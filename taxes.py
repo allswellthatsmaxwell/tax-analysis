@@ -60,6 +60,40 @@ class Data:
     def get_modeler(self):
         return Modeler(self.get_splits())
 
+    def find_doubled_row_indexes(self, min_rows_to_find: int):
+        doublings = []
+        seen = set()
+
+        for i, rowi in self.dat[ITEMS].iterrows():
+            idstr = counts_to_str(rowi)
+            if idstr in seen:
+                continue
+            seen.add(idstr)
+
+            doubled = rowi.mul(2)
+            for j, rowj in self.dat[ITEMS].iterrows():
+                if (doubled == rowj).all():
+                    doublings.append((i, j))
+                    break  # no need for multiple of the same
+            if i != 0 and i % 10 == 0:
+                print(f"Row {i}; {len(doublings)} doubles found so far.")
+            if len(doublings) >= min_rows_to_find:
+                break
+        return pd.DataFrame(doublings, columns=['i', 'j']).drop_duplicates()
+
+
+def plot_doublings(dat):
+    return (
+            pn.ggplot(dat, pn.aes(x='base', y='doubled')) +
+            pn.geom_point() +
+            # pn.geom_abline(slope=1, intercept=0, color='maroon') +
+            pn.geom_abline(slope=2, intercept=0, color='navy') +
+            pn.theme_bw())
+
+
+def counts_to_str(counts):
+    return ','.join([str(x) for x in counts])
+
 
 class Modeler:
     def __init__(self, splits: Splits):
@@ -73,9 +107,9 @@ class Modeler:
             param,
             self.splits.trn_data,
             valid_sets=[self.splits.val_data],
-            num_boost_round=500*2,
-            callbacks=[#lgb.log_evaluation(period=50),
-                       lgb.early_stopping(stopping_rounds=10)])
+            num_boost_round=500 * 2,
+            callbacks=[  # lgb.log_evaluation(period=50),
+                lgb.early_stopping(stopping_rounds=10)])
 
     def get_tstpreds_dat(self):
         preds = self.model.predict(self.splits.tst[ITEMS])
@@ -98,6 +132,7 @@ class Modeler:
                 pn.theme_bw() +
                 pn.theme(figure_size=(4, 3))
         )
+
 
 ITEMS_TO_ASSIGN = {
     'Cockatrice Eye': 4,
