@@ -1,5 +1,6 @@
 import pandas as pd, numpy as np
 import re
+from typing import List
 
 import plotnine as pn
 import lightgbm as lgb
@@ -181,10 +182,50 @@ ITEMS_TO_ASSIGN = {
 }
 
 
-class TaxAssignmentsGenerator:
-    def generate(self):
-        pass
+class AssignmentAssessor:
+    def __init__(self, data: Data, modeler: Modeler):
+        self.data = data
+        self.modeler = modeler
+
+    def assess(self, records):
+        assert (np.sum(np.array(records), axis=0) == np.array(list(ITEMS_TO_ASSIGN.values()))).all()
+        dat = (
+            pd.DataFrame(records, columns=ITEMS)
+            .assign(rowid=lambda d: d.index)
+            .merge(self.data.dat, on=ITEMS, how='left')
+            .drop_duplicates())
+        single_dat = pd.DataFrame(records)
+        single_dat.columns = ITEMS
+        taxes = self.modeler.model.predict(single_dat)
+        return dat.assign(predicted=np.round(taxes, 1)).assign(
+            summed_actual=lambda d: d['total_tax'].sum(),
+            summed_predicted=lambda d: d['predicted'].sum())
+
+
+
+
+
+# class TaxAssignmentsGenerator:
+#     def __init__(self):
+#         self.items = ITEMS_TO_ASSIGN.copy()
+#         self.assignments = []
+#
+#     def generate(self):
+#         self._generate(self.items, [])
+#         return self.assignments
+#
+#     def _generate(self, items, assignment: List[int]):
+#         if sum(items.values()) == 0:
+#             self.assignments.append(assignment)
+#         else:
+#             for adventurer in range(1, 2):
+#                 for item, remaining in items.items():
+#                     for n_assigned in range(1, remaining + 1):
+#                         remaining_items = items.copy()
+#                         remaining_items[item] -= n_assigned
+#                         self._generate(remaining_items, assignment + [adventurer * 10 + n_assigned])
 
 
 def get_rmse(preds_dat):
     return np.sqrt(np.mean((preds_dat['preds'] - preds_dat['actual']) ** 2))
+
