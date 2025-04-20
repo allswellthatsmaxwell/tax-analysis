@@ -62,31 +62,48 @@ class Data:
 
     def find_doubled_row_indexes(self, min_rows_to_find: int):
         doublings = []
-        seen = set()
+        try:
+            return pd.read_csv('data/doublings_dat.csv')
+        except FileNotFoundError:
+            pass
 
-        for i, rowi in self.dat[ITEMS].iterrows():
-            idstr = counts_to_str(rowi)
-            if idstr in seen:
-                continue
-            seen.add(idstr)
+        try:
+            seen = set()
 
-            doubled = rowi.mul(2)
-            for j, rowj in self.dat[ITEMS].iterrows():
-                if (doubled == rowj).all():
-                    doublings.append((i, j))
-                    break  # no need for multiple of the same
-            if i != 0 and i % 10 == 0:
-                print(f"Row {i}; {len(doublings)} doubles found so far.")
-            if len(doublings) >= min_rows_to_find:
-                break
-        return pd.DataFrame(doublings, columns=['i', 'j']).drop_duplicates()
+            for i, rowi in self.dat[ITEMS].iterrows():
+                idstr = counts_to_str(rowi)
+                if idstr in seen:
+                    continue
+                seen.add(idstr)
+
+                doubled = rowi.mul(2)
+                for j, rowj in self.dat[ITEMS].iterrows():
+                    if (doubled == rowj).all():
+                        doublings.append((i, j))
+                        break  # no need for multiple of the same
+                if i != 0 and i % 10 == 0:
+                    print(f"Row {i}; {len(doublings)} doubles found so far.")
+                if len(doublings) >= min_rows_to_find:
+                    break
+        finally:
+            dat = pd.DataFrame(doublings, columns=['i', 'j']).drop_duplicates()
+            return dat
+
+    def get_differences_from_doublings(self, doublings_dat):
+        tax_differences = []
+        for _, row in doublings_dat.iterrows():
+            i, j = row
+            tax_differences.append([i, j, self.dat.iloc[i]['total_tax'],
+                                    self.dat.iloc[j]['total_tax']])
+        return pd.DataFrame(tax_differences,
+                            columns=['i', 'j', 'base', 'doubled']).drop_duplicates()
 
 
 def plot_doublings(dat):
     return (
             pn.ggplot(dat, pn.aes(x='base', y='doubled')) +
             pn.geom_point() +
-            # pn.geom_abline(slope=1, intercept=0, color='maroon') +
+            pn.geom_abline(slope=1, intercept=0, color='maroon') +
             pn.geom_abline(slope=2, intercept=0, color='navy') +
             pn.theme_bw())
 
@@ -132,6 +149,27 @@ class Modeler:
                 pn.theme_bw() +
                 pn.theme(figure_size=(4, 3))
         )
+
+
+def apply_do_operator_over_ranges(data: Data, modeler: Modeler):
+    avg_preds = []
+    for item in ITEMS:
+        maximum = int(data.get_ranges().query(f"item == '{item}'")['max'].iloc[0])
+        df = data.dat.copy()[ITEMS]
+        for val in range(maximum):
+            df[item] = val
+            preds = modeler.model.predict(df)
+            avg_preds.append([item, val, np.mean(preds)])
+    return pd.DataFrame(avg_preds, columns=['item', 'x', 'pred'])
+
+
+def get_do_results_plot(do_dat):
+    return (
+            pn.ggplot(do_dat, pn.aes(x='x', y='pred')) +
+            pn.geom_point() +
+            pn.facet_wrap('item', scales='free') +
+            pn.theme_bw() +
+            pn.theme(figure_size=(9, 5)))
 
 
 ITEMS_TO_ASSIGN = {
